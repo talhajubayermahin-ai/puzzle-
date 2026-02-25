@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LexiQuest: The Word Architect</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #fdfcfb 0%, #e2d1c3 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+        }
+        .glass-morphism {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+        }
+        .letter-tile {
+            transition: all 0.2s ease;
+            cursor: pointer;
+            user-select: none;
+        }
+        .letter-tile:active {
+            transform: scale(0.9);
+        }
+        .letter-tile.selected {
+            background-color: #f472b6 !important;
+            color: white !important;
+            border-color: #db2777 !important;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+        .animate-soft-bounce {
+            animation: bounce 2s infinite;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container max-w-md mx-auto p-4">
+    <!-- Game Container -->
+    <div id="game-card" class="glass-morphism rounded-3xl p-6 relative overflow-hidden">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-pink-600">LexiQuest</h1>
+                <p class="text-xs text-gray-500 font-medium">Build words, show your brilliance!</p>
+            </div>
+            <div class="text-right">
+                <div class="text-sm font-semibold text-gray-400">SCORE</div>
+                <div id="score" class="text-2xl font-bold text-pink-500">0</div>
+            </div>
+        </div>
+
+        <!-- Timer Bar -->
+        <div class="w-full bg-gray-200 h-2 rounded-full mb-6 overflow-hidden">
+            <div id="timer-bar" class="bg-pink-400 h-full w-full transition-all duration-1000"></div>
+        </div>
+
+        <!-- Word Display -->
+        <div class="bg-white/50 rounded-2xl p-4 mb-6 min-h-[60px] flex items-center justify-center border-2 border-dashed border-pink-200">
+            <span id="current-word" class="text-3xl font-bold tracking-widest text-pink-700 uppercase"></span>
+        </div>
+
+        <!-- Letters Grid -->
+        <div id="letters-grid" class="grid grid-cols-4 gap-3 mb-6">
+            <!-- Letters will be injected here by JS -->
+        </div>
+
+        <!-- Controls -->
+        <div class="flex gap-3">
+            <button onclick="clearWord()" class="flex-1 py-3 px-4 rounded-xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition">CLEAR</button>
+            <button onclick="submitWord()" class="flex-[2] py-3 px-4 rounded-xl bg-pink-500 text-white font-bold hover:bg-pink-600 shadow-lg shadow-pink-200 transition">SUBMIT</button>
+        </div>
+
+        <!-- Feedback Message -->
+        <div id="message" class="mt-4 text-center font-medium h-6 text-sm"></div>
+    </div>
+
+    <!-- Game Over Screen (Hidden by default) -->
+    <div id="game-over" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-white/90 p-6 text-center">
+        <div>
+            <h2 class="text-4xl font-bold text-pink-600 mb-2">Game Over!</h2>
+            <p class="text-gray-500 mb-6">You've built a beautiful vocabulary.</p>
+            <div class="bg-pink-50 rounded-3xl p-8 mb-8">
+                <div class="text-sm text-pink-400 uppercase font-bold mb-1">Final Score</div>
+                <div id="final-score" class="text-6xl font-black text-pink-600">0</div>
+            </div>
+            <button onclick="restartGame()" class="w-full py-4 rounded-2xl bg-pink-500 text-white font-bold text-xl hover:bg-pink-600 shadow-xl transition">Play Again</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Game State
+    let score = 0;
+    let currentWord = "";
+    let timeLeft = 60;
+    let timerInterval;
+    let selectedTiles = [];
+    
+    // Very Hard Word List (Small sample for logic, in real apps would be thousands)
+    const dictionary = ["QUEEN", "FLOWER", "GALAXY", "BRIGHT", "WISDOM", "DAZZLE", "SPARKLE", "NATURE", "BEAUTY", "FANCY", "BRAVE", "GRACE", "STARRY", "UNIQUE", "LOVELY", "WONDER", "FREEDOM", "MAGIC", "DREAMS", "PURE", "PEACE", "GENTLE", "KIND"];
+
+    const lettersGrid = document.getElementById('letters-grid');
+    const wordDisplay = document.getElementById('current-word');
+    const scoreDisplay = document.getElementById('score');
+    const timerBar = document.getElementById('timer-bar');
+    const messageDisplay = document.getElementById('message');
+    const gameOverScreen = document.getElementById('game-over');
+    const finalScoreDisplay = document.getElementById('final-score');
+
+    // Init Game
+    function init() {
+        generateLetters();
+        startTimer();
+    }
+
+    function generateLetters() {
+        lettersGrid.innerHTML = '';
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        // Mix common vowels with harder consonants
+        const vowels = "AEEIIOUU";
+        const consonants = "BCDFGHJKLMNPQRSTVWXYZ";
+        
+        let pool = "";
+        for(let i=0; i<6; i++) pool += vowels[Math.floor(Math.random() * vowels.length)];
+        for(let i=0; i<10; i++) pool += consonants[Math.floor(Math.random() * consonants.length)];
+        
+        // Shuffle pool
+        const shuffled = pool.split('').sort(() => 0.5 - Math.random());
+
+        shuffled.forEach((letter, index) => {
+            const tile = document.createElement('div');
+            tile.className = "letter-tile h-16 bg-white border-2 border-pink-100 rounded-2xl flex items-center justify-center text-xl font-bold text-gray-700 shadow-sm hover:border-pink-300";
+            tile.textContent = letter;
+            tile.dataset.index = index;
+            tile.onclick = () => selectLetter(tile, letter, index);
+            lettersGrid.appendChild(tile);
+        });
+    }
+
+    function selectLetter(tile, letter, index) {
+        if (tile.classList.contains('selected')) return;
+
+        tile.classList.add('selected');
+        currentWord += letter;
+        selectedTiles.push(index);
+        updateWordDisplay();
+    }
+
+    function updateWordDisplay() {
+        wordDisplay.textContent = currentWord;
+    }
+
+    function clearWord() {
+        currentWord = "";
+        selectedTiles = [];
+        updateWordDisplay();
+        document.querySelectorAll('.letter-tile').forEach(t => t.classList.remove('selected'));
+    }
+
+    async function submitWord() {
+        if (currentWord.length < 3) {
+            showMessage("Too short! (Min 3 letters)", "text-red-400");
+            return;
+        }
+
+        // Checking word validity using a free API or local logic
+        // For "Very Hard" experience, we'll check against a dictionary pattern
+        const isValid = await checkWordValidity(currentWord);
+
+        if (isValid) {
+            let points = currentWord.length * 10;
+            if (currentWord.length > 5) points += 50; // Bonus for long words
+            
+            score += points;
+            scoreDisplay.textContent = score;
+            showMessage(`Great! +${points}`, "text-green-500");
+            
+            // Add time bonus
+            timeLeft = Math.min(timeLeft + 5, 60);
+            
+            clearWord();
+            generateLetters(); // Refresh letters for next word
+        } else {
+            showMessage("Not a valid word!", "text-red-400");
+            clearWord();
+        }
+    }
+
+    async function checkWordValidity(word) {
+        // Simple local check for this demo, in a real scenario you'd use a large dictionary array
+        // or an API like: https://api.dictionaryapi.dev/api/v2/entries/en/${word}
+        try {
+            const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`);
+            return response.ok;
+        } catch (e) {
+            // Fallback to local small list if offline
+            return dictionary.includes(word);
+        }
+    }
+
+    function showMessage(msg, colorClass) {
+        messageDisplay.textContent = msg;
+        messageDisplay.className = `mt-4 text-center font-medium h-6 text-sm ${colorClass}`;
+        setTimeout(() => {
+            messageDisplay.textContent = "";
+        }, 2000);
+    }
+
+    function startTimer() {
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            const percentage = (timeLeft / 60) * 100;
+            timerBar.style.width = `${percentage}%`;
+
+            if (timeLeft <= 0) {
+                endGame();
+            }
+        }, 1000);
+    }
+
+    function endGame() {
+        clearInterval(timerInterval);
+        finalScoreDisplay.textContent = score;
+        gameOverScreen.classList.remove('hidden');
+    }
+
+    function restartGame() {
+        score = 0;
+        timeLeft = 60;
+        currentWord = "";
+        scoreDisplay.textContent = "0";
+        gameOverScreen.classList.add('hidden');
+        clearWord();
+        generateLetters();
+        startTimer();
+    }
+
+    // Start on load
+    window.onload = init;
+</script>
+
+</body>
+</html>
